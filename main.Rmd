@@ -1,0 +1,123 @@
+---
+title: "main.R"
+author: "xiucheng quek"
+date: "22 April 2016"
+output: word_document
+---
+
+This is written to document the analysis and the generation pertaining to identifying the optimized parameters for dot-aligner
+
+# Introduction 
+
+Previously, to optimize parameters for dot-aligner a total of 8764 combinations of parameters were used on a total of 3064 pairwise alignments. We then conducted RNAalifold and RNAdistance on the results and compared the differences between scores derived from structural alignments via dot aligner and reference alignment from brailbase alignments are considered "gold standards".
+
+To choose the optimal parameters, for a given pairwise alignment, we ranked the differences between the SCI and RNAdistance score (the structure conservation index ) produced using dot aligner and Brial. 
+
+In the ranking of the differences in SCI (sci_diff) generated between dotaligner and brailbase ( dotaligner - brailbase  ),
+   1. Parameters that gives the largest sci_diff are ranked top and given a score of 0. T
+   2. Parameters with The lowest sci_diff are given the score based on the position of the rank. 
+   3. Parameters with the same score are given the same rank and thus have the same score
+   4. The sum of rank score will help determine which parameters are optimial
+   5. The parameters which gives the lowest 
+   
+To ensure that we are selecting for parameters that produce consistent results across various sequence pair, we calculated the CoV, mean and median of the score produced across the 3096 pairs   
+
+
+
+## Dependencies 
+```{r}
+library(reshape2)
+library(ggplot2)
+```
+
+# Figure 1 : Cumulative ranked score of SCI-diff and RNAdistance difference (RND-diff)
+
+The ideal combinations should have both low sci-diff and differences in rnadistance score from the original sequence
+
+```{r}
+
+source('figure1A.R')
+pFigure1A <- generateFigure1A('data/rnd_ranking/cumulative_score_rnd_2104/part-00000', 'data/sci_ranking/cumulative_score_2104/part-00000')
+
+pFigure1A + geom_vline(xintercept=180000)
+
+```
+
+
+Based on the distribution of SCI vs RND, I selected a cut off of 180000 cumulative socre for sci
+```{r}
+figure1AData <- pFigure1A$data
+top_parameters <- figure1AData[figure1AData$sci_score < 180000 ,]
+combinations <- read.table('data/combination_identifier_2104/part-00000')
+colnames(combinations) <- c('e','o','k', 't', 'comb_id')
+top_parameters_combination <- merge(combinations, top_parameters, by.x= 'comb_id', by.y='combination')
+top_parameters_combination
+```
+
+
+I also did a rank product to get the top 20 score
+
+```{r}
+
+figure1AData$ranked_score<- (figure1AData$sci_score /100000) * (figure1AData$rnd_score /100000)
+ordered_figure1A <- figure1AData[order(figure1AData$ranked_score),]
+top_20 <- head(ordered_figure1A, n = 20) 
+
+pFigure1A + geom_point(data=top_20, colour ='red')
+
+
+```
+
+
+```{r}
+
+top_20_parameters <- merge(combinations, top_20, by.x= 'comb_id', by.y='combination')
+write.table(top_20_parameters, sep='\t', file='top_20_parameters.tsv', row.names = F)
+top_20_parameters
+
+```
+
+
+
+# Figure 1B plot the mean of SCI and mean RDD of ( in progress )
+
+```{r}
+
+
+
+```
+
+# Figure 1C : ( code not evaluted)
+```{r, eval=FALSE, echo=F}
+source('figure1C.R')
+
+sci_ranking_file = "data/sci_ranking/output_sci_ranked_kv_2104/part-00000"
+rnd_ranking_file = "data/rnd_ranking/rnd_rankings_kv_combination_2014/part-00000"
+sci_header=c('combination', 'pair', 'sci_rank')
+rnd_header=c('combination', 'pair', 'rnd_rank')
+
+sci_df <- read.table(sci_ranking_file, sep='\t', col.names=sci_header)
+sci_df$adjusted_rank <- sci_df$sci_rank + 1 
+sci_metrics <- get_metrics(sci_df, 'sci')
+
+rnd_df <- read.table(rnd_ranking_file, sep='\t', col.names=rnd_header)
+rnd_df$adjusted_rank <- rnd_df$rnd_rank + 1 
+rnd_metrics <- get_metrics(rnd_df, 'rnd')
+
+metrics_df <- cbind(sci_metrics, rnd_metrics)
+
+save(metrics_df, file='figure1C.rData')
+
+```
+
+Check markdown document for code 
+```{r, eval=FALSE, echo=F}
+
+source('figure1C.R')
+load('figure1C.rData')
+p <- ggplot(metrics_df)
+p + geom_point(aes(x=rank_cv.sci, y=rank_cv.rnd))
+p + geom_point(aes(x=iqr.sci, y=iqr.rnd))
+p + geom_point(aes(x=rank_mean.sci, y=rank_mean.rnd))
+```
+#
